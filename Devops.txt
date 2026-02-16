@@ -1,0 +1,223 @@
+DevOps CWC LLA KT
+We are working for telecom operator which have CWC&LLA, Telecom operator is mobile Internet service and TV subscriptions. In CWC the DevOps processes, tools, branching strategies, CI/CD pipelines, deployment flows, access controls, SonarQube integration, and ecosystem architecture for the ESB/MuleSoft projects across various business units (LLA, CWC, LCPR, LCR, CWP).
+It has 
+•	Bitbucket branching & permissions
+•	Jenkins CI/CD pipelines
+•	MuleSoft runtime environments
+•	JFrog repository structure
+•	Automated & manual deployment flows
+•	ICM ticket validation
+•	SonarQube scanning standards
+
+2. Bitbucket Access & Branching Strategy
+2.1 ESB Access Groups
+Bitbucket access is controlled using six ESB-specific groups:
+Group Name	Permissions
+ESB Integration Dev RO	Read-only
+ESB Integration Dev	Write, create branches
+ESB Integration Dev Admin	Admin access
+ESB Integration Dev Pipeline PR	Pipeline-related PR rights
+ESB Integration Dev PR	PR review/merge permissions
+ESB Integration Dev PR Master	Highest PR authority (CM/DevOps/Leads)
+
+Key Rules
+•	RO users cannot push to any branch.
+•	Only PR/PR Master groups can merge into protected branches.
+•	Master/Main merges are limited to CM and select DevOps users.
+________________________________________
+2.2 Old Branching Strategy (Deprecated)
+Branches used:
+•	master
+•	build
+•	develop
+•	feature/*
+Flow
+1.	Developer creates feature branch.
+2.	PR → develop.
+3.	Develop pipeline runs:
+o	Build → MUnit → JAR → JFrog → Deployment to environments.
+Challenges:
+•	Multiple pipelines & branches.
+•	Duplicate artifact generation.
+•	High maintenance.
+
+2.3 New Simplified Branching Strategy
+Current branches:
+•	main
+•	release/*
+•	feature/*
+2.3.1 New Workflow
+1.	Developer creates feature/ branch from main (via Jira).
+2.	After development → PR raised to main.
+3.	On merge:
+o	Jenkins builds the JAR.
+o	Auto deployment to Dev environment.
+4.	After QA approval:
+o	Create release branch (e.g., release/1.1.0).
+o	Release JAR is used for QA → UAT → PreProd → Prod.
+5.	After Prod:
+o	Sync release changes back into main.
+2.3.2 Benefits
+•	Only two active branches to maintain.
+•	A single artifact is deployed across all higher environments.
+•	No redundant JAR creation.
+•	Supports parallel releases using release branches.
+
+3. JFrog Repository Structure
+JFrog hosts artifacts per Mule runtime version.
+3.1 On Prem (4.2)
+•	esb-snapshot-local
+•	esb-release-local
+3.2 CloudHub Classic (4.4) & CloudHub 2.0 (4.6/4.9)
+•	esb-cloudhub-latest-snapshot-local
+•	esb-cloudhub-latest-release-local
+Rules
+•	Snapshot → Dev deployments.
+•	Release → QA/UAT/PreProd/Prod deployments.
+•	If JAR missing from Cloud repository → fallback to AWS JFrog.
+•	Missing in both → deployment fails.
+
+4. MuleSoft Runtime Architecture
+4.1 Business Groups
+Environments exist across:
+•	LLA OnPrem (4.2)
+•	CWP (4.4/4.6)
+•	LCPR (4.4/4.6)
+•	LCR (4.4/4.6)
+•	LLA CloudHub (4.4/4.6)
+•	CWC (upcoming)
+4.2 Mule Runtime Mapping
+Runtime	Deployment Type
+4.2	On-Premise
+4.4	CloudHub Classic
+4.6	CloudHub 2.0 / Java 17
+
+5. Jenkins CI/CD Pipeline Architecture
+5.1 Multibranch Pipeline Setup
+•	Jenkins job name must match Bitbucket repo name.
+•	Detects all branches automatically.
+•	Uses centralized Jenkins folder for:
+o	Shared Jenkinsfiles
+o	Deployment parameter JSONs
+o	POM and scripts
+5.2 Main Pipeline Stages
+1.	SCM checkout
+2.	Maven build
+3.	MUnit tests → Minimum 75% coverage
+4.	JAR creation & upload to JFrog
+5.	Deployment to target environment
+6.	Notifications (email)
+
+5.3 POM Files per Runtime
+File	Runtime	Notes
+pom.xml	4.2	On-Prem
+pom-ch.xml	4.4	CloudHub Classic
+pom-4.6.xml	4.6	CloudHub 2.0 (Java 17)
+
+6. Deployment Architecture
+6.1 Development Environment – Automatic Deployment
+Triggered on main branch merge:
+1.	Jenkins builds → JAR → JFrog.
+2.	Token generated via Client ID/Secret.
+3.	Org ID, Env ID, Target ID fetched.
+4.	Deployment:
+o	If app exists → PATCH
+o	Else → POST
+5.	Property handling:
+o	Secure configuration JAR encrypts/decrypts sensitive fields.
+
+6.2 Non-Prod & Prod Deployment – Manual
+Manual due to risk & approvals.
+Steps:
+1.	Choose environment & market.
+2.	Fetch artifact from JFrog.
+3.	Deployment script executed manually.
+4.	Deployment via:
+o	Anypoint API + curl
+o	Or Anypoint CLI (preferred for new deployments)
+
+6.3 Artifact Naming
+Strategy	Format
+Old	appname-version.jar
+New	appname-version-buildNumber-commitId.jar
+Scripts support both types.
+
+6.4 App Naming Convention in Anypoint
+Business Group	Format
+LLA	appname-env
+CWP	CWP-appname-env
+LCPR	LCPR-appname-env
+LCR	LCR-appname-env
+
+7. Deployment Scripts & Automation
+Scripts handle:
+•	Token generation
+•	Checking existing apps
+•	Creating/updating apps
+•	Patching configurations
+•	Environment param loading
+•	Encryption/decryption
+•	API Instance ID auto-fetch from Exchange
+
+8. ICM Validation in Jenkins
+8.1 Purpose
+To ensure deployments are tied to valid Jira change requests.
+8.2 Validation Steps
+An ICM ticket must:
+1.	Exist in Jira
+2.	Have status:
+o	To be processed
+o	In Deployment
+3.	Have application type:
+o	ASB
+o	MuleSoft ASB
+8.3 Technical Workflow
+•	Groovy script: backend validation via Jira API.
+•	JavaScript: enables/disables Build button based on validation.
+•	Stored in Jenkins via Simple Theme Plugin.
+
+9. SonarQube Code Quality
+9.1 Setup
+•	Hosted on AWS EC2
+•	Enterprise Edition → 1,000,000 LOC license
+•	Integrated with Okta SSO
+9.2 Team Integrations
+•	RPA (Python) via Bitbucket Pipelines
+•	ESB/MuleSoft (Jenkins)
+•	Ericsson Java application
+9.3 Scan Rules
+•	Only runs on feature and development branches.
+•	Categories:
+o	Bugs
+o	Vulnerabilities
+o	Security Hotspots
+o	Code Smells
+9.4 Special Language Support
+•	Groovy not supported by default → added custom plugin.
+9.5 Notifications
+After every scan, email sent with:
+•	Bugs/vulnerabilities
+•	Security hotspots
+•	Coverage metrics
+Note: CI pipelines do not fail based on Sonar results.
+
+10. Summary
+This structured document covers the full lifecycle of the ESB DevOps ecosystem including:
+•	Bitbucket branching & permissions
+•	New vs old branching strategy
+•	JFrog repository design
+•	Jenkins multibranch CI/CD processes
+•	Runtime-specific builds for 4.2/4.4/4.6
+•	Automated Dev deployments
+•	Manual Non Prod/Prod deployments
+•	ICM ticket validation for controlled releases
+•	SonarQube CI integration with enterprise standards
+This complete flow ensures:
+•	Standardized deployments
+•	Controlled releases
+•	Consistent code quality
+•	Reduced maintenance overhead
+•	Improved developer experience
+Deploy has to happen in the feature 4.9 and 4.6 running
+
+
